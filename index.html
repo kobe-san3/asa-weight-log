@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>あさ体重ログ | 90→70</title>
+<meta name="description" content="毎朝の体重を記録して、90kgから70kgへの進み具合を見える化するシンプルなPWA">
+<meta name="theme-color" content="#0f766e">
+<!-- iOS PWA -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="あさ体重">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{
+--bg:#f4f7f7; --card:#ffffff; --ink:#14201f; --sub:#5b6b69;
+--brand:#0f766e; --brand2:#14b8a6; --line:#dde7e5; --danger:#dc2626;
+--track:#e2ecea; --shadow:0 2px 10px rgba(15,60,55,.08);
+}
+@media (prefers-color-scheme: dark){
+:root{ --bg:#0c1211; --card:#16201e; --ink:#e6f0ee; --sub:#9db3af; --line:#263633; --track:#22312e; --shadow:none;}
+}
+:root[data-theme="dark"]{ --bg:#0c1211; --card:#16201e; --ink:#e6f0ee; --sub:#9db3af; --line:#263633; --track:#22312e; --shadow:none;}
+:root[data-theme="light"]{ --bg:#f4f7f7; --card:#ffffff; --ink:#14201f; --sub:#5b6b69; --line:#dde7e5; --track:#e2ecea;}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+.wrap{max-width:560px;margin:0 auto;padding:16px 16px calc(24px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;margin:4px 0 14px}
+h1{font-size:20px;margin:0}
+h1 small{display:block;font-size:12px;color:var(--sub);font-weight:500;margin-top:2px}
+button{font:inherit;cursor:pointer;border:0}
+.icon-btn{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 12px;color:var(--ink);font-size:13px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+.hero-num{font-size:44px;font-weight:800;line-height:1}
+.hero-num span{font-size:18px;color:var(--sub);font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.stat b{display:block;font-size:20px;margin-top:2px}
+.stat label{font-size:12px;color:var(--sub)}
+.bar{height:12px;background:var(--track);border-radius:999px;overflow:hidden;margin:10px 0 6px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--brand2));border-radius:999px;transition:width.4s}
+.muted{color:var(--sub);font-size:13px}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input[type="date"],input[type="number"],input[type="text"]{
+font:inherit;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);min-width:0}
+input[type="number"]{flex:1;font-size:20px;font-weight:700}
+input[type="date"]{flex:0 0 auto}
+input[type="text"]{flex:1 1 100%}
+.primary{background:var(--brand);color:#fff;border-radius:12px;padding:12px 20px;font-weight:700;font-size:16px}
+.primary:active{transform:scale(.98)}
+canvas{width:100%;height:180px;display:block}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid var(--line)}
+li:last-child{border-bottom:0}
+li.w{font-weight:700;font-size:17px}
+li.d{font-size:13px;color:var(--sub)}
+li.diff{margin-left:auto;font-size:13px;font-weight:600}
+.up{color:var(--danger)}.down{color:var(--brand)}
+.del{background:none;color:var(--sub);font-size:18px;padding:4px 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.ghost{background:var(--card);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:14px}
+#installBtn{display:none}
+footer{text-align:center;color:var(--sub);font-size:12px;padding:12px 0 4px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-size:14px;opacity:0;transition:.3s;pointer-events:none;max-width:90vw;text-align:center}
+.toast.show{transform:translateX(-50%);opacity:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1>あさ体重ログ<small>90kg → 70kg ・ 2027年中に達成</small></h1>
+<button class="icon-btn" id="themeBtn" aria-label="ダークモード切替">🌙 切替</button>
+</header>
+
+<section class="card" aria-label="現在の状況">
+<div class="muted" id="latestDate">まだ記録がありません</div>
+<div class="hero-num" id="latestWeight">--.- <span>kg</span></div>
+<div class="bar" role="progressbar" aria-label="目標までの進捗" aria-valuemin="0" aria-valuemax="100" id="progressBar"><i style="width:0%"></i></div>
+<div class="muted" id="progressText">開始 90.0kg ／ 目標 70.0kg</div>
+</section>
+
+<div class="grid">
+<div class="stat"><label>ここまでの減量</label><b id="statLost">-- kg</b></div>
+<div class="stat"><label>目標まであと</label><b id="statRemain">-- kg</b></div>
+<div class="stat"><label>7日平均</label><b id="statAvg7">-- kg</b></div>
+<div class="stat"><label>記録ストリーク</label><b id="statStreak">-- 日</b></div>
+<div class="stat"><label>理想ペース（今日）</label><b id="statPace">-- kg</b></div>
+<div class="stat"><label>ペースとの差</label><b id="statPaceDiff">--</b></div>
+</div>
+<div style="height:12px"></div>
+
+<section class="card" aria-label="体重を記録">
+<form id="entryForm">
+<input type="date" id="fDate" required aria-label="日付">
+<input type="number" id="fWeight" inputmode="decimal" step="0.1" min="30" max="200" placeholder="今朝の体重" required aria-label="体重 kg">
+<input type="text" id="fMemo" placeholder="メモ（任意：飲み会、旅行など）" maxlength="60" aria-label="メモ">
+<button class="primary" type="submit" style="flex:1 1 100%">記録する</button>
+</form>
+</section>
+
+<section class="card" aria-label="推移グラフ">
+<div class="muted" style="margin-bottom:6px">推移（実線：7日平均 ／ 点線：理想ペース）</div>
+<canvas id="chart" width="520" height="180" aria-label="体重推移グラフ"></canvas>
+</section>
+
+<section class="card" aria-label="履歴">
+<div class="muted" style="margin-bottom:4px">履歴（タップでその日を編集）</div>
+<ul id="history"></ul>
+<div class="muted" id="emptyHistory">朝6:15、体重計に乗ったらここに入力するだけ。</div>
+</section>
+
+<section class="card" aria-label="共有と書き出し">
+<div class="row">
+<button class="ghost" id="shareBtn">📤 週次サマリーを共有</button>
+<button class="ghost" id="csvBtn">⬇ CSVで書き出し</button>
+<label class="ghost" for="csvFile" style="cursor:pointer">⬆ CSVを読み込む</label>
+<input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+<button class="ghost" id="installBtn">📲 ホーム画面に追加</button>
+</div>
+<p class="muted" style="margin:10px 0 0">データはこの端末の中だけに保存されます（サーバー送信なし）。日曜夕方の週次チェックインは、共有ボタンでそのまま送れます。単体版からPWA版へ移るときは、単体版で書き出したCSVをPWA版で読み込めば記録を引き継げます（同じ日付は新しい方で上書き）。</p>
+</section>
+
+<footer>あさ体重ログ v1.0.1 ・ オフライン対応PWA</footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+const APP_VERSION = "1.0.1";
+const LS_KEY = "asa-weight-log-v1";
+const LS_THEME = "asa-weight-log-theme";
+const START_WEIGHT = 90.0, TARGET_WEIGHT = 70.0;
+const START_DATE = "2026-10-27", TARGET_DATE = "2027-12-31";
+
+/* ---------- theme ---------- */
+const root = document.documentElement;
+const savedTheme = localStorage.getItem(LS_THEME);
+if (savedTheme) root.dataset.theme = savedTheme;
+const prefersDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+document.getElementById("themeBtn").addEventListener("click", () => {
+const dark = root.dataset.theme? root.dataset.theme === "dark": prefersDark();
+root.dataset.theme = dark? "light": "dark";
+localStorage.setItem(LS_THEME, root.dataset.theme);
+drawChart();
+});
+const isDark = () => root.dataset.theme? root.dataset.theme === "dark": prefersDark();
+
+/* ---------- storage ---------- */
+const load = () => { try { return JSON.parse(localStorage.getItem(LS_KEY)) || [];} catch { return [];}};
+const save = (entries) => localStorage.setItem(LS_KEY, JSON.stringify(entries));
+let entries = load(); // [{date:"YYYY-MM-DD", weight:Number, memo:String}]
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 1) => (n == null || isNaN(n))? "--": Number(n).toFixed(d);
+const todayStr = () => { const t = new Date(); return toStr(t);};
+const toStr = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+const parseDate = (s) => { const [y,m,dd] = s.split("-").map(Number); return new Date(y, m-1, dd);};
+const sorted = () => [...entries].sort((a,b) => a.date < b.date? -1: 1);
+
+/* ---------- stats ---------- */
+function avg7(list, endDateStr) {
+const end = parseDate(endDateStr).getTime();
+const inWin = list.filter(e => { const t = parseDate(e.date).getTime(); return t <= end && end - t < 7*864e5;});
+if (!inWin.length) return null;
+return inWin.reduce((s,e) => s + e.weight, 0) / inWin.length;
+}
+function streak(list) {
+if (!list.length) return 0;
+const days = new Set(list.map(e => e.date));
+let cur = parseDate(todayStr());
+if (!days.has(toStr(cur))) { cur.setDate(cur.getDate() - 1); if (!days.has(toStr(cur))) return 0;}
+let n = 0; while (days.has(toStr(cur))) { n++; cur.setDate(cur.getDate() - 1);}
+return n;
+}
+function idealWeight(dateStr) {
+const t0 = parseDate(START_DATE).getTime(), t1 = parseDate(TARGET_DATE).getTime(), t = parseDate(dateStr).getTime();
+if (t <= t0) return START_WEIGHT; if (t >= t1) return TARGET_WEIGHT;
+return START_WEIGHT + (TARGET_WEIGHT - START_WEIGHT) * (t - t0) / (t1 - t0);
+}
+
+/* ---------- render ---------- */
+function render() {
+const list = sorted();
+const latest = list[list.length - 1];
+$("fDate").max = todayStr();
+if (latest) {
+$("latestDate").textContent = `${latest.date.replaceAll("-","/")} の記録`;
+$("latestWeight").innerHTML = `${fmt(latest.weight)} <span>kg</span>`;
+const lost = START_WEIGHT - latest.weight;
+const pct = Math.max(0, Math.min(100, lost / (START_WEIGHT - TARGET_WEIGHT) * 100));
+$("progressBar").querySelector("i").style.width = pct + "%";
+$("progressBar").setAttribute("aria-valuenow", Math.round(pct));
+$("progressText").textContent = `進捗 ${fmt(pct,0)}% ・ 開始 ${fmt(START_WEIGHT)}kg ／ 目標 ${fmt(TARGET_WEIGHT)}kg`;
+$("statLost").textContent = `${lost >= 0? "-": "+"}${fmt(Math.abs(lost))} kg`;
+$("statRemain").textContent = `${fmt(Math.max(0, latest.weight - TARGET_WEIGHT))} kg`;
+const a7 = avg7(list, latest.date);
+$("statAvg7").textContent = a7 == null? "-- kg": `${fmt(a7)} kg`;
+const ideal = idealWeight(todayStr());
+$("statPace").textContent = `${fmt(ideal)} kg`;
+const diff = latest.weight - ideal;
+$("statPaceDiff").textContent = `${diff <= 0? "◎ ": ""}${diff >= 0? "+": "-"}${fmt(Math.abs(diff))} kg`;
+}
+$("statStreak").textContent = `${streak(list)} 日`;
+
+const ul = $("history"); ul.innerHTML = "";
+$("emptyHistory").style.display = list.length? "none": "block";
+[...list].reverse().slice(0, 31).forEach((e, i, arr) => {
+const prev = arr[i + 1];
+const d = prev? e.weight - prev.weight: null;
+const li = document.createElement("li");
+li.innerHTML = `<span><span class="w">${fmt(e.weight)} kg</span><br><span class="d">${e.date.replaceAll("-","/")}${e.memo? " ・ " + escapeHtml(e.memo): ""}</span></span>
+<span class="diff ${d == null? "": d > 0? "up": d < 0? "down": ""}">${d == null? "": (d > 0? "+": "") + fmt(d) + " kg"}</span>`;
+const del = document.createElement("button");
+del.className = "del"; del.textContent = "×"; del.setAttribute("aria-label", `${e.date}の記録を削除`);
+del.addEventListener("click", (ev) => { ev.stopPropagation(); entries = entries.filter(x => x.date!== e.date); save(entries); render(); toast("削除しました");});
+li.appendChild(del);
+li.addEventListener("click", () => { $("fDate").value = e.date; $("fWeight").value = e.weight; $("fMemo").value = e.memo || ""; $("fWeight").focus();});
+ul.appendChild(li);
+});
+drawChart();
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+/* ---------- chart ---------- */
+function drawChart() {
+const cv = $("chart"); if (!cv) return;
+const dpr = devicePixelRatio || 1;
+const W = cv.clientWidth, H = 180;
+cv.width = W * dpr; cv.height = H * dpr;
+const ctx = cv.getContext("2d"); if (!ctx) return; ctx.scale(dpr, dpr);
+const dark = isDark();
+ctx.clearRect(0, 0, W, H);
+const list = sorted();
+const pad = { l: 34, r: 8, t: 8, b: 18};
+const minW = Math.min(TARGET_WEIGHT - 2,...list.map(e => e.weight));
+const maxW = Math.max(START_WEIGHT + 1,...list.map(e => e.weight));
+const t0 = list.length? parseDate(list[0].date).getTime(): parseDate(START_DATE).getTime();
+const t1 = Math.max(parseDate(todayStr()).getTime(), t0 + 864e5);
+const X = (t) => pad.l + (t - t0) / (t1 - t0) * (W - pad.l - pad.r);
+const Y = (w) => pad.t + (maxW - w) / (maxW - minW) * (H - pad.t - pad.b);
+ctx.font = "10px sans-serif"; ctx.fillStyle = dark? "#9db3af": "#5b6b69"; ctx.strokeStyle = dark? "#263633": "#dde7e5";
+for (let g = 0; g <= 3; g++) { const w = minW + (maxW - minW) * g / 3, y = Y(w);
+ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke(); ctx.fillText(fmt(w, 0), 4, y + 3);}
+// ideal pace (dashed)
+ctx.setLineDash([4, 4]); ctx.strokeStyle = dark? "#64748b": "#94a3b8"; ctx.beginPath();
+ctx.moveTo(X(Math.max(t0, parseDate(START_DATE).getTime())), Y(idealWeight(toStr(new Date(Math.max(t0, parseDate(START_DATE).getTime()))))));
+ctx.lineTo(X(t1), Y(idealWeight(todayStr()))); ctx.stroke(); ctx.setLineDash([]);
+if (list.length < 2) { ctx.fillStyle = dark? "#9db3af": "#5b6b69"; ctx.font = "12px sans-serif";
+ctx.fillText(list.length? "2日分たまるとグラフが出ます": "記録がたまるとグラフが出ます", pad.l + 6, H / 2); return;}
+// 7-day average line
+ctx.strokeStyle = "#0f766e"; ctx.lineWidth = 2; ctx.beginPath();
+list.forEach((e, i) => { const a = avg7(list, e.date); const x = X(parseDate(e.date).getTime()), y = Y(a);
+i === 0? ctx.moveTo(x, y): ctx.lineTo(x, y);});
+ctx.stroke(); ctx.lineWidth = 1;
+// raw points
+ctx.fillStyle = "#14b8a6";
+list.forEach(e => { ctx.beginPath(); ctx.arc(X(parseDate(e.date).getTime()), Y(e.weight), 2.5, 0, 7); ctx.fill();});
+}
+
+/* ---------- actions ---------- */
+$("entryForm").addEventListener("submit", (ev) => {
+ev.preventDefault();
+const date = $("fDate").value, weight = parseFloat($("fWeight").value), memo = $("fMemo").value.trim();
+if (!date || isNaN(weight)) return;
+const ex = entries.find(e => e.date === date);
+if (ex) { ex.weight = weight; ex.memo = memo; toast(`${date} の記録を更新しました`);}
+else { entries.push({ date, weight, memo}); toast("記録しました。朝のひと手間、えらい。");}
+save(entries); $("fMemo").value = ""; render();
+});
+$("shareBtn").addEventListener("click", async () => {
+const list = sorted(); if (!list.length) { toast("まだ記録がありません"); return;}
+const latest = list[list.length - 1];
+const weekAgo = list.filter(e => parseDate(e.date).getTime() <= parseDate(latest.date).getTime() - 7 * 864e5).pop();
+const text = `今週の体重：${fmt(latest.weight)}kg（開始90kg→目標70kg、あと${fmt(Math.max(0, latest.weight - TARGET_WEIGHT))}kg）` +
+(weekAgo? `／先週比 ${(latest.weight - weekAgo.weight) >= 0? "+": ""}${fmt(latest.weight - weekAgo.weight)}kg`: "") +
+`／7日平均 ${fmt(avg7(list, latest.date))}kg`;
+if (navigator.share) { try { await navigator.share({ text});} catch {}}
+else { try { await navigator.clipboard.writeText(text); toast("サマリーをコピーしました");} catch { toast(text);}}
+});
+$("csvBtn").addEventListener("click", () => {
+const csv = "date,weight_kg,memo\n" + sorted().map(e => `${e.date},${e.weight},"${(e.memo || "").replaceAll('"','""')}"`).join("\n");
+const a = document.createElement("a");
+a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv"}));
+a.download = "asa-weight-log.csv"; a.click(); URL.revokeObjectURL(a.href);
+});
+/* ---------- CSV import (migration between standalone / PWA) ---------- */
+function parseCSV(text) {
+  const rows = []; let row = [], field = "", inQ = false;
+  const s = String(text).replace(/^\ufeff/, "");
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inQ) {
+      if (c === '"') { if (s[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+      else field += c;
+    } else if (c === '"') inQ = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && s[i + 1] === "\n") i++;
+      row.push(field); field = ""; rows.push(row); row = [];
+    } else field += c;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+function importCSVText(text) {
+  const rows = parseCSV(text);
+  let added = 0, updated = 0, skipped = 0;
+  for (const r of rows) {
+    if (!r.length || r[0] === "date") continue; // header
+    const date = (r[0] || "").trim(), weight = parseFloat(r[1]), memo = (r[2] || "").slice(0, 60);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(weight) || weight < 30 || weight > 200) { skipped++; continue; }
+    const ex = entries.find(e => e.date === date);
+    if (ex) { ex.weight = weight; ex.memo = memo; updated++; }
+    else { entries.push({ date, weight, memo }); added++; }
+  }
+  save(entries); render();
+  return { added, updated, skipped };
+}
+$("csvFile").addEventListener("change", async (ev) => {
+  const f = ev.target.files[0]; if (!f) return;
+  try {
+    const r = importCSVText(await f.text());
+    toast(`読み込み完了：追加${r.added}件・更新${r.updated}件${r.skipped ? `・対象外${r.skipped}件` : ""}`);
+  } catch { toast("CSVの読み込みに失敗しました"); }
+  ev.target.value = "";
+});
+window.WeightLog = { parseCSV, importCSVText, getEntries: () => entries };
+let deferredPrompt = null;
+addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredPrompt = e; $("installBtn").style.display = "inline-block";});
+$("installBtn").addEventListener("click", async () => { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; $("installBtn").style.display = "none";}});
+
+let toastTimer;
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show");
+clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2400);}
+
+$("fDate").value = todayStr();
+render();
+addEventListener("resize", drawChart);
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
